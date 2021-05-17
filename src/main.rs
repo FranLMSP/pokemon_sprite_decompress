@@ -469,8 +469,7 @@ fn main() {
 
     let filename = match &args.get(1) {
         Some(filename) => filename.clone(),
-        // None => panic!("No filename specified!"),
-        None => "surprise.pkz",
+        None => panic!("No filename specified!"),
     };
 
     println!("Filename: {}", &filename);

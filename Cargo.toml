@@ -1,5 +1,5 @@
 [package]
-name = "pokemon_sprite"
+name = "pokemon_sprite_decompress"
 version = "0.1.0"
 authors = ["Franco Colmenarez <info@francoacg.com>"]
 edition = "2018"

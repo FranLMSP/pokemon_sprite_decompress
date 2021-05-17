@@ -126,15 +126,16 @@ impl Buffer {
         let column_height = self.height * 8;
 
         self.bytes[self.byte_index] = self.bytes[self.byte_index] | (data << 8 - (self.bit_index + 2));
+        // println!("Byte {:08b}", self.bytes[self.byte_index]);
 
         self.byte_index += 1;
         self.row_index += 1;
         // We have reached the end of the column
         if self.row_index >= column_height as usize {
             self.row_index = 0;
-            self.bit_index += 2;// Next column (in bits)
             self.byte_index -= column_height as usize;
-            if self.bit_index >= 7 {
+            self.bit_index += 2;// Next column (in bits)
+            if self.bit_index >= 8 {
                 self.bit_index = 0;
                 // Jump to the next column
                 self.byte_index += column_height as usize;
@@ -282,15 +283,15 @@ impl Buffer {
             1 => 7 * 7 * 8, // Address at 392
             _ => 7 * 7 * 8 * 2, // Address at 784
         };
-        let mut row_index = 0;
-        let row_height = self.height as usize * 8; // Height in bits
-        while row_index < row_height {
+        let end_index = 8 * 7 * 7;
+        let mut index = 0;
+        while index < end_index {
 
-            self.bytes[(row_index + replace_index_offset) as usize] =
-                self.bytes[(row_index + replace_index_offset) as usize] ^
-                self.bytes[(row_index + buffer_index_offset) as usize];
+            self.bytes[index + replace_index_offset] =
+                self.bytes[index + replace_index_offset] ^
+                self.bytes[index + buffer_index_offset];
 
-            row_index += 1;
+            index += 1;
         }
     }
 
@@ -421,7 +422,7 @@ impl Buffer {
                     current_row_pixel_count = 0;
                     pixel_col -= 8;
                     pixel_row += 1;
-                    if pixel_row > pixel_height {
+                    if pixel_row >= pixel_height {
                         pixel_col += 8;
                         pixel_row = 0;
                     }
@@ -434,48 +435,28 @@ impl Buffer {
         println!("Total pixels count: {}", total_pixels_count);
     }
 
-    fn render_all_buffers(&self) {
+    fn render_bitplanes(&self) {
         
         println!("{}", termion::clear::All);
         let pixel_height = 7 * 8;
         let mut pixel_row = 0;
         let mut pixel_col = 0;
-        let mut current_row_pixel_count = 0;
-        let mut total_pixels_count = 0;
 
         for byte in &self.bytes[..] {
-            let mut shift: u8 = 8;
-            let mut count = 0;
-            while count < 4 {
-                shift -= 2;
-                let bit_pair = (byte >> shift) & 0b00000011;
-                count += 1;
-
-                let coords = termion::cursor::Goto(pixel_col + 1, pixel_row + 1);
-
-                match bit_pair {
-                    0 => print!("{goto}{color} ", goto = coords, color = termion::color::Bg(termion::color::White)),
-                    _ => print!("{goto}{color} ", goto = coords, color = termion::color::Bg(termion::color::Black)),
-                }
-
-                total_pixels_count += 1;
-
-                pixel_col += 1;
-                current_row_pixel_count += 1;
-                if current_row_pixel_count > 7 {
-                    current_row_pixel_count = 0;
-                    pixel_col -= 8;
-                    pixel_row += 1;
-                    if pixel_row > pixel_height {
-                        pixel_col += 8;
-                        pixel_row = 0;
-                    }
-                }
+            let coords = termion::cursor::Goto(pixel_col + 1, pixel_row + 1);
+            let byte_string = format!("{:08b}", byte);
+            let new_string: String = byte_string.chars().map(|x| match x {
+                '0' => ' ',
+                _ => '@',
+            }).collect();
+            print!("{}{}", coords, new_string);
+            pixel_row += 1;
+            if pixel_row >= pixel_height {
+                pixel_row = 0;
+                pixel_col += 8;
             }
         }
-
-        println!("{reset}", reset = termion::style::Reset);
-        println!("Total pixels count: {}", total_pixels_count);
+        println!("");
     }
 }
 
@@ -486,8 +467,8 @@ fn main() {
 
     let filename = match &args.get(1) {
         Some(filename) => filename.clone(),
-        None => panic!("No filename specified!"),
-        // None => "surprise.pkz",
+        // None => panic!("No filename specified!"),
+        None => "surprise.pkz",
     };
 
     println!("Filename: {}", &filename);
@@ -539,7 +520,7 @@ fn main() {
 
     println!("Starting to decompress the first buffer!");
     buffer.decompress_to_bitplane(&mut sprite_bytes, initial_packet, primary_buffer == 0, true);
-    println!("{:02X?}", buffer.bytes);
+    // println!("{:02X?}", buffer.bytes);
 
     let encoding_mode: EncodingMode = {
         if sprite_bytes.current_bit() == 0 {
@@ -565,7 +546,7 @@ fn main() {
     println!("Starting to decompress the second buffer!");
     let initial_packet: u8 = sprite_bytes.read_bits(1, false); // Read next 1 bit
     buffer.decompress_to_bitplane(&mut sprite_bytes, initial_packet, primary_buffer == 1, false);
-    println!("{:02X?}", buffer.bytes);
+    // println!("{:02X?}", buffer.bytes);
 
     // In mode 1 and 3, we have to delta-decode the buffer C
     // In any mode, we have to delta-decode the buffer B
@@ -578,28 +559,29 @@ fn main() {
         },
         EncodingMode::Mode2 => {
             buffer.delta_decode(1);
-            buffer.xor_buffers(1, 2);
+            buffer.xor_buffers(2, 1);
         },
         EncodingMode::Mode3 => {
             buffer.delta_decode(2);
-            buffer.xor_buffers(1, 2);
+            buffer.delta_decode(1);
+            buffer.xor_buffers(2, 1);
         },
     }
     println!("Encoding result:");
-    println!("{:02X?}", buffer.bytes);
+    // println!("{:02X?}", buffer.bytes);
 
     // Now we need to copy the content from buffer B to A and from C to B,
     // but in the right order for the Gameboy to draw
     buffer.copy_bitplane(1, 0);
     buffer.copy_bitplane(2, 1);
     println!("Bitplane copy result:");
-    println!("{:02X?}", buffer.bytes);
+    // println!("{:02X?}", buffer.bytes);
 
     // Almost there!
     // Now we need to zipper the buffer A and B into buffer C and B going backwards
     buffer.zip_buffers();
     println!("Resulting zip:");
-    println!("{:02X?}", buffer.bytes);
+    // println!("{:02X?}", buffer.bytes);
 
     // And we can finally start rendering our sprite!!!
     buffer.render();

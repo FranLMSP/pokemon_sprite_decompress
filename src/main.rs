@@ -378,61 +378,63 @@ impl Buffer {
     }
 
     fn render(&self) {
-        
-        println!("{}", termion::clear::All);
-        let pixel_height = 7 * 8;
+        let mut pixels = Vec::<u8>::new(); // a "vram" to store each pixel
         let buffer_b_start = 7 * 7 * 8; // 392
         let mut index = buffer_b_start;
-        let buffer_c_end = (7 * 7 * 8 * 3) - 1; // 392
-        let mut pixel_row = 0;
-        let mut pixel_col = 0;
-        let mut current_row_pixel_count = 0;
-        let mut total_pixels_count = 0;
+        let buffer_c_end = (7 * 7 * 8 * 3) - 1; // 1175
 
         while index <= buffer_c_end {
-            let byte = self.bytes[index];
-            let mut shift: u8 = 8;
-            let mut count = 0;
-            while count < 4 {
-                shift -= 2;
-                let bit_pair = (byte >> shift) & 0b00000011;
-                count += 1;
+            let mut bit_index = 0;
 
-                let coords = termion::cursor::Goto(pixel_col + 1, pixel_row + 1);
+            while bit_index <= 7 {
+                let bit_a = (self.bytes[index] >> (7 - bit_index)) & 0b00000001;
+                let bit_b = (self.bytes[index + 1] >> (7 - bit_index)) & 0b00000001;
 
-                match bit_pair {
-                    0 => print!("{goto}{color} ", goto = coords, color = termion::color::Bg(termion::color::White)),
-                    1 => print!("{goto}{color} ", goto = coords, color = termion::color::Bg(termion::color::Blue)),
-                    2 => print!("{goto}{color} ", goto = coords, color = termion::color::Bg(termion::color::LightBlue)),
-                    _ => print!("{goto}{color} ", goto = coords, color = termion::color::Bg(termion::color::Black)),
+                if bit_a == 0 && bit_b == 0 {
+                    pixels.push(0);
+                } else if bit_a == 0 && bit_b == 1 {
+                    pixels.push(1);
+                } else if bit_a == 1 && bit_b == 0 {
+                    pixels.push(2);
+                } else {
+                    pixels.push(3);
                 }
 
-                /* match bit_pair {
-                    0 => print!("{goto}0", goto = coords),
-                    2 => print!("{goto}1", goto = coords),
-                    3 => print!("{goto}2", goto = coords),
-                    _ => print!("{goto}3", goto = coords),
-                } */
-
-                total_pixels_count += 1;
-
-                pixel_col += 1;
-                current_row_pixel_count += 1;
-                if current_row_pixel_count > 7 {
-                    current_row_pixel_count = 0;
-                    pixel_col -= 8;
-                    pixel_row += 1;
-                    if pixel_row >= pixel_height {
-                        pixel_col += 8;
-                        pixel_row = 0;
-                    }
-                }
+                bit_index += 1;
             }
-            index += 1;
+
+            index += 2;
         }
 
+        println!("{}", termion::clear::All);
+        let mut pixel_col = 0;
+        let mut pixel_row = 0;
+        let mut current_row_col = 0;
+        let pixel_height = 8 * 7;
+        for pixel in pixels {
+
+            let coords = termion::cursor::Goto((pixel_col * 2) + 1, pixel_row + 1);
+
+            match pixel {
+                0 => print!("{goto}{color}  ", goto = coords, color = termion::color::Bg(termion::color::White)),
+                1 => print!("{goto}{color}  ", goto = coords, color = termion::color::Bg(termion::color::Blue)),
+                2 => print!("{goto}{color}  ", goto = coords, color = termion::color::Bg(termion::color::LightBlue)),
+                _ => print!("{goto}{color}  ", goto = coords, color = termion::color::Bg(termion::color::Black)),
+            }
+            
+            pixel_col += 1;
+            current_row_col += 1;
+            if current_row_col > 7 {
+                current_row_col = 0;
+                pixel_col -= 8;
+                pixel_row += 1;
+                if pixel_row >= pixel_height {
+                    pixel_row = 0;
+                    pixel_col += 8;
+                }
+            }
+        }
         println!("{reset}", reset = termion::style::Reset);
-        println!("Total pixels count: {}", total_pixels_count);
     }
 
     fn render_bitplanes(&self) {
@@ -558,7 +560,7 @@ fn main() {
             buffer.delta_decode(1);
         },
         EncodingMode::Mode2 => {
-            buffer.delta_decode(1);
+            buffer.delta_decode(2);
             buffer.xor_buffers(2, 1);
         },
         EncodingMode::Mode3 => {
@@ -584,6 +586,8 @@ fn main() {
     // println!("{:02X?}", buffer.bytes);
 
     // And we can finally start rendering our sprite!!!
+
+    // buffer.render_bitplanes();
     buffer.render();
 
 }

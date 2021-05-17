@@ -1,7 +1,7 @@
 # 1st gen Pokémon decompression algorithm in Rust
 
 This is a mini-project I made just for fun and for practicing with bitwising and the Rust language.
-The code is not the cleanest ever, but I have plans to improve it later (I hope so).
+The code is not the cleanest ever, but I have plans to improve it later.
 
 The 1st generation Pokémon sprites are compressed with a very interesting algorithm very well explained [here](https://youtu.be/aF1Yw_wu2cM) and [here](https://youtu.be/ZI50XUeN6QE) by the Youtube channel [Retro Game Mechanics Explained](https://www.youtube.com/channel/UCwRqWnW5ZkVaP_lZF7caZ-g). He also has a [Github profile](https://github.com/Dotsarecool/) and he made a tool which was very useful for me during the development of this mini-project: [http://www.dotsarecool.com/rgme/tech/gen1decompress.html](http://www.dotsarecool.com/rgme/tech/gen1decompress.html).
 

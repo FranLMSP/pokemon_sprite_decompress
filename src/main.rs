@@ -111,7 +111,7 @@ impl Buffer {
         // sprite in a box of 7 * 7 tiles
         // vertical offset = 7 - height
         // horizontal offset = ((7 - width) / 2) + (1/2) -> then round the result down
-        self.vertical_offset = MAX_SPRITE_SIZE - width;
+        self.vertical_offset = if width > MAX_SPRITE_SIZE {255 - width} else {MAX_SPRITE_SIZE - width};
         let res = (((MAX_SPRITE_SIZE as f32 - height as f32) / 2.0) + (1.0 / 2.0)) as f32;
         self.horizontal_offset = res.floor() as u8;
         // We need 3 bitplanes, the first and second ones are where the 

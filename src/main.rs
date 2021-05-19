@@ -118,7 +118,7 @@ impl Buffer {
         // The third one is usually 7 x 7 maximum too, but glitched pokemon could
         // have way more
         // Note: Each tile has 64 pixels
-        self.bitplane_length = ((7 * 7 * 2) + cmp::max(7 * 7, width as usize * height as usize)) * 8;
+        self.bitplane_length = (7 * 7 * 2 * 8) + (cmp::max(7 * 7, width as usize * height as usize) * 8);
         self.bytes = vec![0; self.bitplane_length];
     }
 
@@ -534,10 +534,12 @@ fn main() {
             match sprite_bytes.current_bit() {
                 0 => {
                     println!("Encoding mode 2");
+                    sprite_bytes.next_bit();
                     EncodingMode::Mode2
                 },
                 _ => {
                     println!("Encoding mode 3");
+                    sprite_bytes.next_bit();
                     EncodingMode::Mode3
                 },
             }

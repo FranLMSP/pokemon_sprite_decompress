@@ -521,7 +521,8 @@ fn main() {
 
     println!("Starting to decompress the first buffer!");
     buffer.decompress_to_bitplane(&mut sprite_bytes, initial_packet, primary_buffer == 0, true);
-    // println!("{:02X?}", buffer.bytes);
+    println!("First decompress result: ");
+    buffer.render_bitplanes();
 
     let encoding_mode: EncodingMode = {
         if sprite_bytes.current_bit() == 0 {
@@ -542,11 +543,13 @@ fn main() {
             }
         }
     };
-    sprite_bytes.next_bit();
 
     println!("Starting to decompress the second buffer!");
     let initial_packet: u8 = sprite_bytes.read_bits(1, false); // Read next 1 bit
+    println!("Initial packet: {}", initial_packet);
     buffer.decompress_to_bitplane(&mut sprite_bytes, initial_packet, primary_buffer == 1, false);
+    println!("Second decompress result: ");
+    buffer.render_bitplanes();
     // println!("{:02X?}", buffer.bytes);
 
     // In mode 1 and 3, we have to delta-decode the buffer C
@@ -569,6 +572,7 @@ fn main() {
         },
     }
     println!("Encoding result:");
+    buffer.render_bitplanes();
     // println!("{:02X?}", buffer.bytes);
 
     // Now we need to copy the content from buffer B to A and from C to B,

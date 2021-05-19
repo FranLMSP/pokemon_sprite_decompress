@@ -112,7 +112,7 @@ impl Buffer {
         // vertical offset = 7 - height
         // horizontal offset = ((7 - width) / 2) + (1/2) -> then round the result down
         self.vertical_offset = if width > MAX_SPRITE_SIZE {255 - width + MAX_SPRITE_SIZE} else {MAX_SPRITE_SIZE - width};
-        let height_substraction: u8 = if width > MAX_SPRITE_SIZE {255 - height + MAX_SPRITE_SIZE} else {MAX_SPRITE_SIZE - height};
+        let height_substraction: u8 = if height > MAX_SPRITE_SIZE {255 - height + MAX_SPRITE_SIZE} else {MAX_SPRITE_SIZE - height};
         let res = ((height_substraction as f32 / 2.0) + (1.0 / 2.0)) as f32;
         self.horizontal_offset = res.floor() as u8;
         // We need 3 bitplanes, the first and second ones are where the 
@@ -443,10 +443,11 @@ impl Buffer {
         
         println!("{}", termion::clear::All);
         let pixel_height = 7 * 8;
+        let buffer_c_end = (7 * 7 * 8 * 3) - 1;
         let mut pixel_row = 0;
         let mut pixel_col = 0;
 
-        for byte in &self.bytes[..] {
+        for byte in &self.bytes[..buffer_c_end] {
             let coords = termion::cursor::Goto(pixel_col + 1, pixel_row + 1);
             let byte_string = format!("{:08b}", byte);
             let new_string: String = byte_string.chars().map(|x| match x {

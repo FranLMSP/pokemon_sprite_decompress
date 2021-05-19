@@ -16,6 +16,13 @@ struct BitStream {
     last_two_bits: u8,
 }
 
+const BUFFER_A_START: usize = 0;
+const BUFFER_A_END: usize = 391;
+const BUFFER_B_START: usize = 392;
+const BUFFER_B_END: usize = 783;
+const BUFFER_C_START: usize = 784;
+const BUFFER_C_END: usize = 1175;
+
 impl BitStream {
     fn load_bytes_from_file(&mut self, filename: &str) {
         let mut file = match File::open(&filename) {
@@ -103,6 +110,17 @@ struct Buffer {
 }
 
 impl Buffer {
+    // Buffer A => 0
+    // Buffer B => 1
+    // Buffer C => 2
+    fn get_buffer_address(buffer_number: u8) -> usize {
+        match buffer_number{
+            0 => BUFFER_A_START, // Address at 0
+            1 => BUFFER_B_START, // Address at 392
+            _ => BUFFER_C_START, // Address at 784
+        }
+    }
+
     fn allocate_space(&mut self, width: u8, height: u8) {
         const MAX_SPRITE_SIZE: u8 = 7; // 7 tiles
         self.width = width;
@@ -128,7 +146,6 @@ impl Buffer {
         let column_height = self.height * 8;
 
         self.bytes[self.byte_index] = self.bytes[self.byte_index] | (data << 8 - (self.bit_index + 2));
-        // println!("Byte {:08b}", self.bytes[self.byte_index]);
 
         self.byte_index += 1;
         self.row_index += 1;
@@ -154,22 +171,22 @@ impl Buffer {
         }
     }
 
-    fn decompress_to_bitplane(&mut self, bytes: &mut BitStream, initial_packet: u8, primary_buffer: bool, first_bitplane: bool) {
+    fn decompress_to_bitplane(&mut self, bytes: &mut BitStream, initial_packet: u8, primary_buffer: bool) {
         let mut rle_length: u8 = 0;
         let mut reading_first_rle = initial_packet == 0; // 1 for data packet and 0 for RLE packet
         let mut reading_second_rle = false;
         let mut first_rle_bits_read: u16 = 0;
         let mut bits_written: usize = 0;
-        let bytes_to_write: usize = self.width as usize * self.height as usize * 8;
+        let bits_to_write: usize = self.width as usize * self.height as usize * 8 * 8;
         // If the primary buffer is true, start decoding into buffer B at location 392,
         // else, decode into buffer C at location 784
         // Glitched pokemons overflow from Buffer B to C
-        self.byte_index = if primary_buffer {7 * 7 * 8} else {7 * 7 * 8 * 2};
+        self.byte_index = if primary_buffer {BUFFER_B_START} else {BUFFER_C_START};
         self.bit_index = 0;
         self.row_index = 0;
 
-        println!("Bytes to write: {}", bytes_to_write);
-        while (first_bitplane && bits_written < bytes_to_write * 8) || (!first_bitplane && bytes.bits_left() > 0) {
+        println!("Bits to write: {}", bits_to_write);
+        while bits_written < bits_to_write {
 
             if reading_first_rle {
                 let current_bit = bytes.current_bit();
@@ -229,12 +246,8 @@ impl Buffer {
         println!("Bytes written: {}", bits_written / 8);
     }
 
-    fn delta_decode(&mut self, buffer: u8) {
-        let index_offset = match buffer{
-            0 => 0, // Address at 0
-            1 => 7 * 7 * 8, // Address at 392
-            _ => 7 * 7 * 8 * 2, // Address at 784
-        };
+    fn delta_decode(&mut self, buffer_number: u8) {
+        let index_offset = Buffer::get_buffer_address(buffer_number);
         let mut row_index: usize = 0;
         let row_height = self.height as usize * 8; // Height in bits
         let col_width = self.width as usize; // Width in bytes
@@ -275,16 +288,8 @@ impl Buffer {
     }
 
     fn xor_buffers(&mut self, buffer_index: u8, replace_buffer: u8) {
-        let buffer_index_offset: usize = match buffer_index {
-            0 => 0, // Address at 0
-            1 => 7 * 7 * 8, // Address at 392
-            _ => 7 * 7 * 8 * 2, // Address at 784
-        };
-        let replace_index_offset: usize = match replace_buffer {
-            0 => 0, // Address at 0
-            1 => 7 * 7 * 8, // Address at 392
-            _ => 7 * 7 * 8 * 2, // Address at 784
-        };
+        let buffer_index_offset = Buffer::get_buffer_address(buffer_index);
+        let replace_index_offset = Buffer::get_buffer_address(replace_buffer);
         let end_index = 8 * 7 * 7;
         let mut index = 0;
         while index < end_index {
@@ -297,12 +302,8 @@ impl Buffer {
         }
     }
 
-    fn wipe_bitplane(&mut self, bitplane: u8) {
-        let offset: usize = match bitplane {
-            0 => 0, // Address at 0
-            1 => 7 * 7 * 8, // Address at 392
-            _ => 7 * 7 * 8 * 2, // Address at 784
-        };
+    fn wipe_bitplane(&mut self, buffer_number: u8) {
+        let offset = Buffer::get_buffer_address(buffer_number);
 
         // Wipe the "to" bitplane first
         let mut index = offset;
@@ -317,16 +318,8 @@ impl Buffer {
 
         self.wipe_bitplane(to);
 
-        let to_bitplane_start: usize = match to {
-            0 => 0, // Address at 0
-            1 => 7 * 7 * 8, // Address at 392
-            _ => 7 * 7 * 8 * 2, // Address at 784
-        };
-        let from_bitplane_start: usize = match from {
-            0 => 0, // Address at 0
-            1 => 7 * 7 * 8, // Address at 392
-            _ => 7 * 7 * 8 * 2, // Address at 784
-        };
+        let to_bitplane_start = Buffer::get_buffer_address(to);
+        let from_bitplane_start = Buffer::get_buffer_address(from);
         let mut from_bitplane_index = from_bitplane_start;
 
         // Step 1: calculate the offset of the top-left corner
@@ -354,9 +347,9 @@ impl Buffer {
     }
 
     fn zip_buffers(&mut self) {
-        let mut last_index_buffer_a: usize = (7 * 7 * 8) - 1;
-        let mut last_index_buffer_b: usize = (7 * 7 * 8 * 2) - 1;
-        let mut last_index_buffer_c: usize = (7 * 7 * 8 * 3) - 1;
+        let mut last_index_buffer_a: usize = BUFFER_A_END;
+        let mut last_index_buffer_b: usize = BUFFER_B_END;
+        let mut last_index_buffer_c: usize = BUFFER_C_END;
 
         println!("last index A: {}", last_index_buffer_a);
         println!("last index B: {}", last_index_buffer_b);
@@ -375,17 +368,13 @@ impl Buffer {
             last_index_buffer_b -= 1;
             last_index_buffer_c -= 1;
         }
-
-        println!("Buffer C result: {:02X?}", &self.bytes[last_index_buffer_c..]);
     }
 
     fn render(&self) {
         let mut pixels = Vec::<u8>::new(); // a "vram" to store each pixel
-        let buffer_b_start = 7 * 7 * 8; // 392
-        let mut index = buffer_b_start;
-        let buffer_c_end = (7 * 7 * 8 * 3) - 1; // 1175
+        let mut index = BUFFER_B_START;
 
-        while index <= buffer_c_end {
+        while index <= BUFFER_C_END {
             let mut bit_index = 0;
 
             while bit_index <= 7 {
@@ -443,11 +432,10 @@ impl Buffer {
         
         println!("{}", termion::clear::All);
         let pixel_height = 7 * 8;
-        let buffer_c_end = (7 * 7 * 8 * 3) - 1;
         let mut pixel_row = 0;
         let mut pixel_col = 0;
 
-        for byte in &self.bytes[..buffer_c_end] {
+        for byte in &self.bytes[..BUFFER_C_END] {
             let coords = termion::cursor::Goto(pixel_col + 1, pixel_row + 1);
             let byte_string = format!("{:08b}", byte);
             let new_string: String = byte_string.chars().map(|x| match x {
@@ -523,7 +511,7 @@ fn main() {
     println!("Total bitplane length: {}", buffer.bitplane_length * 8);
 
     println!("Starting to decompress the first buffer!");
-    buffer.decompress_to_bitplane(&mut sprite_bytes, initial_packet, primary_buffer == 0, true);
+    buffer.decompress_to_bitplane(&mut sprite_bytes, initial_packet, primary_buffer == 0);
     println!("First decompress result: ");
     buffer.render_bitplanes();
 
@@ -552,10 +540,9 @@ fn main() {
     println!("Starting to decompress the second buffer!");
     let initial_packet: u8 = sprite_bytes.read_bits(1, false); // Read next 1 bit
     println!("Initial packet: {}", initial_packet);
-    buffer.decompress_to_bitplane(&mut sprite_bytes, initial_packet, primary_buffer == 1, false);
+    buffer.decompress_to_bitplane(&mut sprite_bytes, initial_packet, primary_buffer == 1);
     println!("Second decompress result: ");
     buffer.render_bitplanes();
-    // println!("{:02X?}", buffer.bytes);
 
     // In mode 1 and 3, we have to delta-decode the buffer C
     // In any mode, we have to delta-decode the buffer B
@@ -578,24 +565,18 @@ fn main() {
     }
     println!("Encoding result:");
     buffer.render_bitplanes();
-    // println!("{:02X?}", buffer.bytes);
 
     // Now we need to copy the content from buffer B to A and from C to B,
     // but in the right order for the Gameboy to draw
     buffer.copy_bitplane(1, 0);
     buffer.copy_bitplane(2, 1);
-    println!("Bitplane copy result:");
-    // println!("{:02X?}", buffer.bytes);
 
     // Almost there!
     // Now we need to zipper the buffer A and B into buffer C and B going backwards
     buffer.zip_buffers();
     println!("Resulting zip:");
-    // println!("{:02X?}", buffer.bytes);
 
     // And we can finally start rendering our sprite!!!
-
-    // buffer.render_bitplanes();
     buffer.render();
 
 }
